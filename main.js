@@ -94,7 +94,7 @@
         },
         barrier: {
             label: '势垒内部',
-            explain: '区域 II 的解是 $Ce^{-\\kappa x} + De^{\\kappa x}$。$k \\to i\\kappa$ 后，$e^{ikx}$ 改写成指数项，包络 $|\\psi|$ 在掉。'
+            explain: '区域 II：$Ce^{-\\kappa x} + De^{\\kappa x}$。能量低于势垒时，波数 $k$ 变成纯虚数 $i\\kappa$，振荡解 $e^{ikx}$ 退化成指数衰减。包络 $|\\psi|$ 从墙左侧到右侧持续下降。'
         },
         right: {
             label: '右侧透射',
@@ -104,23 +104,23 @@
 
     const theoryComponentMeta = {
         all: {
-            explain: '蓝线实部，红线虚部，灰色虚线包络。切到只看包络 $|\psi|$ 可以确认墙内指数衰减落在哪个量。'
+            explain: '蓝线是实部，红线是虚部，灰色虚线是包络 $|\psi|$。点"只看包络"可以单独看指数衰减的轮廓，不会被实虚部的振荡干扰。'
         },
         real: {
-            explain: '实部不是概率，也不是完整波函数。它只是 $\\psi$ 在实轴上的投影，所以会振荡、会过零，看起来不像一条单独的衰减线。'
+            explain: '实部只是 $\\psi$ 在实轴上的投影，不是概率。它会振荡、会穿过零轴，单独看它就是一条来回摆动的线，不是光滑的衰减轮廓。'
         },
         imag: {
-            explain: '虚部和实部地位一样，只是相位错开。把它单独拎出来看，你会看到同样的波动结构，只不过峰谷位置和蓝线不重合。'
+            explain: '虚部和实部地位对等，只是相位差了 90°。单独看它也是来回振荡的线，峰谷位置和实部错开，但幅度变化规律相同。'
         },
         env: {
-            explain: '包络 $|\\psi| = \\sqrt{(\\Re\\psi)^2 + (\\Im\\psi)^2}$ 是这里该盯住的量。墙内说的“指数衰减”，就是它在往下掉。'
+            explain: '包络 $|\\psi| = \\sqrt{(\\Re\\psi)^2 + (\\Im\\psi)^2}$ 是实部和虚部合起来的总幅度。墙内说的”指数衰减”，指的就是这条灰色虚线：它不振荡，只单调下降。'
         }
     };
 
     const theoryScenes = {
         tunnel: {
             title: '场景 1：墙里为什么还有波？',
-            subtitle: '蓝线是实部，红线是虚部，灰色虚线是包络 $|\\psi|$。墙内包络掉。',
+            subtitle: '蓝实部，红虚部，灰虚线是包络 $|\\psi|$。墙内包络指数衰减。',
             focus: 'barrier',
             calcLead: '先看墙内振幅，再看理论透射率。',
             run() {
@@ -129,18 +129,18 @@
         },
         width: {
             title: '场景 2：为什么只加一点宽度，结果差很多？',
-            subtitle: '盯住灰色虚线包络和右侧透射波，看它们怎么一起掉下去。',
+            subtitle: '看灰色虚线（包络）和右侧透射波幅度。宽度每加一点，透射就跌一截。',
             focus: 'right',
-            calcLead: '这次看 T 的数量级，宽度 d 决定衰减累计了多久。',
+            calcLead: '宽度 d 控制指数衰减的累计距离。d 翻倍，T 跌好几个数量级。',
             run() {
                 animateWidthSweep();
             }
         },
         overBarrier: {
-            title: '场景 3：翻过去了，为什么还会反弹？',
-            subtitle: '把能量拉过势垒高度，看左边干涉纹变密了还是变稀疏了。',
+            title: '场景 3：能量够了，为什么还有反射？',
+            subtitle: '把 E 调到 V₀ 以上，看左边干涉纹变稀疏，但反射波还在。',
             focus: 'left',
-            calcLead: '透射会明显变大，但左边反射纹还在——因为边界匹配还在把一部分波折回来。',
+            calcLead: 'E > V₀ 时透射明显变大，但反射不会消失。边界条件要匹配，入射波就得有一部分被反射。',
             run() {
                 animateParamsTo(3.5, 3.0, 0.5);
             }
@@ -450,6 +450,13 @@
         currentTheoryFocus = focusKey;
         updateTheoryNarrative();
         if (currentTab === 'theory') {
+            ['regionCardLeft', 'regionCardBarrier', 'regionCardRight'].forEach(id => {
+                const card = document.getElementById(id);
+                if (card) card.classList.remove('highlight');
+            });
+            const cardMap = { left: 'regionCardLeft', barrier: 'regionCardBarrier', right: 'regionCardRight' };
+            const targetCard = document.getElementById(cardMap[focusKey]);
+            if (targetCard) targetCard.classList.add('highlight');
             renderTheoryNumerov();
         }
     }
@@ -460,6 +467,13 @@
         currentTheoryFocus = theoryScenes[sceneKey].focus;
         updateTheoryNarrative();
         if (currentTab === 'theory') {
+            ['regionCardLeft', 'regionCardBarrier', 'regionCardRight'].forEach(id => {
+                const card = document.getElementById(id);
+                if (card) card.classList.remove('highlight');
+            });
+            const cardMap = { left: 'regionCardLeft', barrier: 'regionCardBarrier', right: 'regionCardRight' };
+            const targetCard = document.getElementById(cardMap[currentTheoryFocus]);
+            if (targetCard) targetCard.classList.add('highlight');
             updateTheoryCalc();
             renderTheoryNumerov();
         }
@@ -974,13 +988,6 @@
         ctx.beginPath(); ctx.moveTo(bLeft, 0); ctx.lineTo(bLeft, height); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(bRight, 0); ctx.lineTo(bRight, height); ctx.stroke();
         ctx.setLineDash([]);
-        
-        // Region Text
-        ctx.fillStyle = isDarkMode ? '#a0aec0' : '#718096';
-        ctx.font = '14px sans-serif';
-        ctx.fillText('区域 I (入射与反射)', 10, height - 15);
-        ctx.fillText('区域 II (势垒内部)', bLeft + 10, height - 15);
-        ctx.fillText('区域 III (透射波)', bRight + 10, height - 15);
 
         // ==================== 严谨稳态波函数计算 ====================
         const N_stat = 1000; 
@@ -1219,11 +1226,11 @@
         const mode = modeInput ? modeInput.value : 'total';
         const descEl = document.getElementById('staticModeDesc');
         if (mode === 'total') {
-            descEl.textContent = "驻波干涉：导致实虚部振幅不同，包络呈波浪起伏";
+            descEl.textContent = "驻波干涉：入射波和反射波叠加，实虚部振幅交替变化，包络呈波浪起伏";
         } else if (mode === 'incident') {
-            descEl.textContent = "右行波：单个右行平面波在自由区本身是解，但它单独不能满足整道势垒的边界匹配，所以全局散射解必须再带上反射项。";
+            descEl.textContent = "右行波：$Fe^{ikx}$ 本身是自由空间的解，但它单独无法满足势垒两侧的边界条件，所以完整散射解必须加上反射项。";
         } else if (mode === 'reflected') {
-            descEl.textContent = "左行波：它不是额外加出来的装饰，而是边界连续条件逼出来的那部分。和入射波叠加后，才得到满足整道势垒匹配的总波函数。";
+            descEl.textContent = "左行波：$Be^{-ikx}$ 不是凑数的，它是边界连续性条件要求的。和入射波加在一起，才能满足两个界面上的匹配条件。";
         }
         
         const psiR = new Float64Array(N_stat);
@@ -2373,4 +2380,26 @@
             if (currentTab === 'theory') renderTheoryNumerov();
             });
         });
+
+        initCardTilt('.theory-region-card');
+        initCardTilt('.timeline-card');
     });
+
+    function initCardTilt(selector) {
+        const cards = document.querySelectorAll(selector);
+        cards.forEach(card => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
+                const rotateY = ((x - cx) / cx) * 3;
+                const rotateX = ((cy - y) / cy) * 3;
+                card.style.transform = `perspective(600px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+            });
+        });
+    }
