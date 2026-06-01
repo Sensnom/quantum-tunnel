@@ -825,17 +825,17 @@
     }
 
     function getRelationParticleFill() {
-        return isDark() ? 'rgba(125, 211, 252, 0.55)' : 'rgba(37, 99, 235, 0.38)';
+        return isDark() ? 'rgba(147, 223, 255, 0.8)' : 'rgba(59, 130, 246, 0.6)';
     }
 
     function getParticleRegionFill(x) {
         if (x > barrierCenter + d / 2) {
-            return 'rgba(72, 187, 120, 0.8)';
+            return 'rgba(74, 222, 128, 0.9)';
         }
         if (x < barrierCenter - d / 2) {
-            return 'rgba(49, 130, 206, 0.6)';
+            return 'rgba(96, 165, 250, 0.8)';
         }
-        return 'rgba(237, 137, 54, 0.8)';
+        return 'rgba(252, 163, 80, 0.9)';
     }
 
     function renderDensityParticleRelation(ctx, width, height) {
