@@ -4,7 +4,7 @@
     // m (mass) = 5.68563 eV·fs²/nm²
     // x 的单位为 nm, E, V 的单位为 eV, t 的单位为 fs
     
-    const N_visible = 800;
+    const N_visible = 1000;
     const N_damp = 190; // PhET 使用的 190 个隐藏阻尼网格
     const N = N_visible + 2 * N_damp; // 总网格数 1180
     
