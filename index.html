@@ -177,7 +177,7 @@
                             <button class="theory-component-btn" data-component="imag">只看虚部</button>
                             <button class="theory-component-btn" data-component="env">只看包络</button>
                         </div>
-                        <div class=”theory-component-explain” id=”theoryComponentExplain”>ψ 是复函数。蓝线是实部 ψ_R，红线是虚部 ψ_I。灰色虚线是包络 |ψ| = √(ψ_R² + ψ_I²)，即复数的模长。概率密度 |ψ|² 由模长决定——墙内指数衰减，衰减的就是这条灰色虚线。想单独看衰减轮廓，点”只看包络”把实虚部关掉。</div>
+                        <div class="theory-component-explain" id="theoryComponentExplain">ψ 是复函数。蓝线是实部 ψ_R，红线是虚部 ψ_I。灰色虚线是包络 |ψ| = √(ψ_R² + ψ_I²)，即复数的模长。概率密度 |ψ|² 由模长决定——墙内指数衰减，衰减的就是这条灰色虚线。想单独看衰减轮廓，点”只看包络”把实虚部关掉。</div>
 
                         <div class="theory-region-grid">
                             <div class="theory-region-card region-left" id="regionCardLeft">
@@ -356,6 +356,62 @@
         </div>
     </div>
     
+    <div class="ai-annotation-layer" id="aiAnnotationLayer" aria-hidden="true">
+        <div class="ai-spotlight" id="aiSpotlight"></div>
+        <svg class="ai-annotation-svg" id="aiAnnotationSvg" width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+                <marker id="aiArrowHead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="currentColor"></path>
+                </marker>
+            </defs>
+        </svg>
+        <div class="ai-annotation-label" id="aiAnnotationLabel"></div>
+    </div>
+
+    <div class="ai-whiteboard-backdrop" id="aiWhiteboardBackdrop" aria-hidden="true">
+        <section class="ai-whiteboard-panel" role="dialog" aria-modal="true" aria-labelledby="aiWhiteboardTitle">
+            <div class="ai-whiteboard-header">
+                <div>
+                    <p class="ai-whiteboard-kicker">AI 板书</p>
+                    <h2 id="aiWhiteboardTitle">理论讲解</h2>
+                </div>
+                <button type="button" class="ai-icon-button" id="aiWhiteboardClose" aria-label="关闭白板">×</button>
+            </div>
+            <div class="ai-whiteboard-body" id="aiWhiteboardBody"></div>
+            <div class="ai-whiteboard-footer">
+                <button type="button" class="theory-link-btn" id="aiWhiteboardPrev">上一步</button>
+                <button type="button" class="tutorial-action-btn" id="aiWhiteboardNext">下一步</button>
+            </div>
+            <form class="ai-whiteboard-followup" id="aiWhiteboardFollowupForm">
+                <textarea id="aiWhiteboardFollowupInput" rows="2" placeholder="继续追问：这里的近似条件是什么？" aria-label="继续向 AI 助教追问"></textarea>
+                <button type="submit">继续问</button>
+            </form>
+        </section>
+    </div>
+
+    <aside class="ai-tutor" id="aiTutor" aria-label="AI 助教">
+        <button type="button" class="ai-tutor-launcher" id="aiTutorLauncher" aria-expanded="false" aria-controls="aiTutorPanel">
+            <span class="ai-tutor-launcher-icon">AI</span>
+            <span class="ai-tutor-launcher-text">助教</span>
+        </button>
+        <section class="ai-tutor-panel" id="aiTutorPanel" aria-hidden="true">
+            <div class="ai-tutor-header">
+                <div>
+                    <p class="ai-tutor-kicker">Quantum Tutor</p>
+                    <h2>AI 助教</h2>
+                    <span id="aiTutorStatus" role="status" aria-live="polite" aria-atomic="true">内置讲解模式</span>
+                </div>
+                <button type="button" class="ai-icon-button" id="aiTutorClose" aria-label="收起 AI 助教">×</button>
+            </div>
+            <div class="ai-tutor-messages" id="aiTutorMessages" aria-live="polite"></div>
+            <div class="ai-tutor-suggestions" id="aiTutorSuggestions" aria-label="快捷问题"></div>
+            <form class="ai-tutor-input-row" id="aiTutorForm">
+                <textarea id="aiTutorInput" rows="2" placeholder="问我：为什么墙里还有波？" aria-label="向 AI 助教提问"></textarea>
+                <button type="submit" id="aiTutorSend">发送</button>
+            </form>
+        </section>
+    </aside>
+
     <script src="physics.js"></script>
     <script src="main.js"></script>
 </body>
