@@ -369,7 +369,7 @@
     </div>
 
     <div class="ai-whiteboard-backdrop" id="aiWhiteboardBackdrop" aria-hidden="true">
-        <section class="ai-whiteboard-panel" role="dialog" aria-modal="true" aria-labelledby="aiWhiteboardTitle">
+        <section class="ai-whiteboard-panel" role="region" aria-labelledby="aiWhiteboardTitle">
             <div class="ai-whiteboard-header">
                 <div>
                     <p class="ai-whiteboard-kicker">AI 板书</p>
@@ -383,8 +383,9 @@
                 <button type="button" class="tutorial-action-btn" id="aiWhiteboardNext">下一步</button>
             </div>
             <form class="ai-whiteboard-followup" id="aiWhiteboardFollowupForm">
-                <textarea id="aiWhiteboardFollowupInput" rows="2" placeholder="继续追问：这里的近似条件是什么？" aria-label="继续向 AI 助教追问"></textarea>
-                <button type="submit">继续问</button>
+                <textarea id="aiWhiteboardFollowupInput" rows="2" placeholder="追问当前讲解：这里的近似条件是什么？" aria-label="追问当前白板讲解"></textarea>
+                <button type="submit">追问</button>
+                <button type="button" class="ai-whiteboard-new-topic" id="aiWhiteboardNewTopic">问其他问题</button>
             </form>
         </section>
     </div>

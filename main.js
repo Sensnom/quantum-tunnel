@@ -193,6 +193,20 @@
         tValue: { selector: '#tValue', label: '理论透射系数' }
     };
 
+    const assistantTargetTabs = {
+        waveCanvas: 'sim',
+        densityCanvas: 'sim',
+        ensembleCanvas: 'sim',
+        actualTValue: 'sim',
+        staticWaveCanvas: 'data',
+        chartCanvas: 'data',
+        theoryNumerovCanvas: 'theory',
+        theoryCalcResult: 'theory',
+        regionCardBarrier: 'theory',
+        regionCardLeft: 'theory',
+        regionCardRight: 'theory'
+    };
+
     const assistantLessons = {
         tunnelDecay: {
             title: '墙里为什么还有波？',
@@ -288,7 +302,7 @@
     }
 
     function buildAssistantSystemPrompt() {
-        return `你是一个量子隧穿仿真网页的中文 AI 助教，像老师一样带学生看图、看参数、看公式。你必须只返回 JSON，不要返回 Markdown 代码块。JSON 格式为：{"reply":"中文讲解","suggestions":["后续问题"],"whiteboard":{"title":"可选板书标题","steps":["可选步骤HTML"]},"actions":[{"type":"动作名","payload":{}}]}。可用动作：jumpTab(tab=sim|data|history|theory), runTheoryScene(scene=tunnel|width|overBarrier), setTheoryFocus(focus=left|barrier|right), setTheoryComponent(component=all|real|imag|env), animateParams(E,V0,d,duration), animateWidthSweep, scrollToTarget(target), annotate(target,shape=ring|arrow|spotlight,label), showWhiteboard, clearAnnotations。重要：如果你要打开白板，必须现场生成与学生问题直接相关的 whiteboard 或 showWhiteboard payload：{"title":"板书标题","steps":["第1步 HTML/公式","第2步 HTML/公式"],"followups":["可追问问题"]}。不要使用 lessonId；lessonId 只供本地兜底，不是远程回答格式。普通问题优先在聊天中回答，不要频繁打开白板；只有学生明确要求推导、公式、WKB、分步骤解释，或问题确实需要板书时，才生成与问题直接相关的 whiteboard steps。不要套用不相关预置板书。steps 可以包含 <p>、<div class=\"math-block\">$$...$$</div> 和行内 $...$，但不要包含 script、style 或事件属性。不要编造不存在的页面元素。回答要简洁、教学感强，必要时安排 1-4 个动作。`;
+        return `你是一个量子隧穿仿真网页的中文 AI 助教，像老师一样带学生看图、看参数、看公式。你必须只返回 JSON，不要返回 Markdown 代码块。JSON 格式为：{"reply":"中文讲解","suggestions":["后续问题"],"whiteboard":{"title":"可选板书标题","steps":["可选步骤HTML"]},"actions":[{"type":"动作名","payload":{}}]}。可用动作：jumpTab(tab=sim|data|history|theory), runTheoryScene(scene=tunnel|width|overBarrier), setTheoryFocus(focus=left|barrier|right), setTheoryComponent(component=all|real|imag|env), animateParams(E,V0,d,duration), animateWidthSweep, playSimulation, pauseSimulation, resetSimulation, scrollToTarget(target), annotate(target,shape=ring|arrow|spotlight,label), showWhiteboard, clearAnnotations。每次回答都尽量给 1-3 个页面互动动作：概念解释优先跳到/标注 theoryNumerovCanvas、regionCardBarrier、regionCardLeft、regionCardRight；参数问题优先标注 v0Slider、dSlider、eSlider、chartCanvas、theoryCalcResult；实时波函数/播放动画/波包运动问题必须 jumpTab(sim) 并 playSimulation，再 annotate(waveCanvas 或 densityCanvas)。不要只给文字。重要：普通问题优先在聊天中回答并配合 annotate/scrollToTarget，不要频繁打开白板；只有学生明确要求推导、公式、WKB、分步骤解释，或问题确实需要板书时，才生成与问题直接相关的 whiteboard 或 showWhiteboard payload：{"title":"板书标题","steps":["第1步 HTML/公式","第2步 HTML/公式"],"followups":["可追问问题"]}。不要使用 lessonId；lessonId 只供本地兜底，不是远程回答格式。不要套用不相关预置板书。steps 可以包含 <p>、<div class=\"math-block\">$$...$$</div> 和行内 $...$，但不要包含 script、style 或事件属性。不要编造不存在的页面元素。回答要简洁、教学感强。`;
     }
 
     function buildAssistantMessages(userMessage) {
@@ -323,12 +337,28 @@
 
     function normalizeAssistantResponse(value) {
         const response = value && typeof value === 'object' ? value : {};
-        const actions = Array.isArray(response.actions) ? response.actions.slice(0, 6) : [];
-        if (response.whiteboard && typeof response.whiteboard === 'object') {
+        const reply = typeof response.reply === 'string' ? response.reply : '我先带你看一个最关键的图像：墙内的波函数不是突然归零，而是指数衰减。';
+        const rawActions = Array.isArray(response.actions) ? response.actions.slice(0, 6) : [];
+        const actions = [];
+        let keptWhiteboard = false;
+        rawActions.forEach(action => {
+            if (action?.type === 'showWhiteboard') {
+                if (keptWhiteboard) return;
+                keptWhiteboard = true;
+            }
+            actions.push(action);
+        });
+        const hasWhiteboardAction = actions.some(action => action?.type === 'showWhiteboard');
+        if (response.whiteboard && typeof response.whiteboard === 'object' && !hasWhiteboardAction) {
             actions.push({ type: 'showWhiteboard', payload: response.whiteboard });
         }
+        actions.forEach(action => {
+            if (action?.type === 'showWhiteboard' && action.payload && typeof action.payload === 'object') {
+                action.payload.replySummary = reply;
+            }
+        });
         return {
-            reply: typeof response.reply === 'string' ? response.reply : '我先带你看一个最关键的图像：墙内的波函数不是突然归零，而是指数衰减。',
+            reply,
             suggestions: Array.isArray(response.suggestions) ? response.suggestions.filter(item => typeof item === 'string').slice(0, 4) : [],
             actions
         };
@@ -495,11 +525,18 @@
         const sendButton = document.getElementById('aiTutorSend');
         const input = document.getElementById('aiTutorInput');
         const status = document.getElementById('aiTutorStatus');
+        const wbInput = document.getElementById('aiWhiteboardFollowupInput');
+        const wbButton = document.querySelector('#aiWhiteboardFollowupForm button[type="submit"]');
         if (sendButton) {
             sendButton.disabled = isLoading;
             sendButton.textContent = isLoading ? '生成中' : '发送';
         }
         if (input) input.disabled = isLoading;
+        if (wbInput) wbInput.disabled = isLoading;
+        if (wbButton) {
+            wbButton.disabled = isLoading;
+            wbButton.textContent = isLoading ? '生成中' : '追问';
+        }
         if (status) status.textContent = isLoading ? 'AI 助教正在讲解…' : (assistantApiConfig.apiKey ? '远程模型已连接' : '内置讲解模式');
     }
 
@@ -532,6 +569,7 @@
         if (action.type === 'setTheoryComponent') return Boolean(theoryComponentMeta[payload.component]);
         if (action.type === 'animateParams') return ['E', 'V0', 'd'].every(key => Number.isFinite(Number(payload[key])));
         if (action.type === 'animateWidthSweep') return true;
+        if (['playSimulation', 'pauseSimulation', 'resetSimulation'].includes(action.type)) return true;
         if (action.type === 'scrollToTarget' || action.type === 'annotate') return Boolean(assistantTargets[payload.target]);
         if (action.type === 'showWhiteboard') return Boolean(assistantLessons[payload.lessonId]) || (typeof payload.title === 'string' && Array.isArray(payload.steps) && payload.steps.length > 0);
         if (action.type === 'clearAnnotations') return true;
@@ -545,6 +583,24 @@
     function getAssistantTargetElement(targetKey) {
         const target = assistantTargets[targetKey];
         return target ? document.querySelector(target.selector) : null;
+    }
+
+    function getValidAssistantRect(element) {
+        if (!element) return null;
+        const rect = element.getBoundingClientRect();
+        if (rect.width < 4 || rect.height < 4) return null;
+        if (rect.bottom < 0 || rect.right < 0 || rect.top > window.innerHeight || rect.left > window.innerWidth) return null;
+        return rect;
+    }
+
+    async function waitForAssistantTargetRect(targetKey, attempts = 12) {
+        for (let i = 0; i < attempts; i++) {
+            const element = getAssistantTargetElement(targetKey);
+            const rect = getValidAssistantRect(element);
+            if (rect) return { element, rect };
+            await waitAssistant(80);
+        }
+        return { element: getAssistantTargetElement(targetKey), rect: null };
     }
 
     async function executeAssistantActions(actions) {
@@ -570,13 +626,28 @@
             } else if (action.type === 'animateWidthSweep') {
                 window.animateWidthSweep();
                 await waitAssistant(1200);
-            } else if (action.type === 'scrollToTarget') {
-                scrollAssistantTargetIntoView(payload.target);
+            } else if (action.type === 'playSimulation') {
+                activateTab('sim');
+                if (currentFrame >= MAX_FRAMES) resetAndRender();
+                isPlaying = true;
+                updatePlayPauseUI();
                 await waitAssistant(450);
+            } else if (action.type === 'pauseSimulation') {
+                isPlaying = false;
+                playbackFrameAccumulator = 0;
+                updatePlayPauseUI();
+                await waitAssistant(250);
+            } else if (action.type === 'resetSimulation') {
+                resetAndRender();
+                isPlaying = true;
+                updatePlayPauseUI();
+                await waitAssistant(450);
+            } else if (action.type === 'scrollToTarget') {
+                await scrollAssistantTargetIntoView(payload.target);
+                await waitAssistant(200);
             } else if (action.type === 'annotate') {
-                scrollAssistantTargetIntoView(payload.target);
-                await waitAssistant(350);
-                showAssistantAnnotation(payload);
+                await scrollAssistantTargetIntoView(payload.target);
+                await showAssistantAnnotation(payload);
                 await waitAssistant(Math.min(Number(payload.duration) || 1200, 1600));
             } else if (action.type === 'showWhiteboard') {
                 showAssistantWhiteboard(payload);
@@ -587,9 +658,84 @@
         }
     }
 
-    function scrollAssistantTargetIntoView(targetKey) {
+    async function scrollAssistantTargetIntoView(targetKey) {
+        const targetTab = assistantTargetTabs[targetKey];
+        if (targetTab && currentTab !== targetTab) {
+            activateTab(targetTab);
+            await waitAssistant(180);
+        }
         const element = getAssistantTargetElement(targetKey);
         if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        await waitAssistant(350);
+    }
+
+    function wantsAssistantWhiteboard(userMessage) {
+        return /白板|板书|公式|推导|展开讲|分步骤|详细讲|wkb|近似条件/.test(String(userMessage || '').toLowerCase());
+    }
+
+    function createWhiteboardFromReply(title, reply) {
+        const cleanReply = stripAssistantHtml(reply).slice(0, 900);
+        return {
+            title,
+            replySummary: reply,
+            steps: [
+                `<p>${escapeAssistantText(cleanReply || '我们把这一步拆开看。')}</p>`,
+                '<p>如果要继续深入，可以直接在下面追问：例如“这一步为什么成立？”、“近似条件是什么？”、“能不能换成图像解释？”。</p>'
+            ],
+            followups: ['这一步为什么成立？', '近似条件是什么？', '换成图像解释']
+        };
+    }
+
+    function inferAssistantInteractionActions(userMessage, response) {
+        const actions = Array.isArray(response.actions) ? response.actions : [];
+        const text = String(userMessage || '').toLowerCase();
+        const inferred = [...actions];
+        const hasVisualAction = actions.some(action => ['annotate', 'scrollToTarget'].includes(action.type));
+        const hasNavigationAction = actions.some(action => ['jumpTab', 'runTheoryScene', 'setTheoryFocus', 'playSimulation'].includes(action.type));
+        const wantsLocate = /圈|框|标|指|哪里|在哪|看哪|找不到|没看到|波函数图|图在那里|图在哪/.test(text);
+        const wantsWavePlayback = /播放.*波|波.*动画|波包.*动画|实时.*演化|运动|暂停|开始播放|播放波/.test(text);
+        const hasWhiteboard = actions.some(action => action?.type === 'showWhiteboard');
+
+        if (wantsAssistantWhiteboard(userMessage) && !hasWhiteboard) {
+            inferred.push({
+                type: 'showWhiteboard',
+                payload: createWhiteboardFromReply('本轮讲解展开', response.reply)
+            });
+        }
+
+        if (wantsWavePlayback) {
+            if (!hasNavigationAction) inferred.push({ type: 'jumpTab', payload: { tab: 'sim' } });
+            inferred.push({ type: 'playSimulation', payload: {} });
+            if (!hasVisualAction) inferred.push({ type: 'annotate', payload: { target: 'waveCanvas', shape: 'ring', label: '这里是实时波函数 Ψ(x,t) 的动画', duration: 12000 } });
+            return inferred.slice(0, 7);
+        }
+
+        if (wantsLocate) {
+            if (/波函数|波的图|图/.test(text)) {
+                inferred.push({ type: 'jumpTab', payload: { tab: currentTab === 'sim' ? 'sim' : 'theory' } });
+                inferred.push({ type: 'annotate', payload: { target: currentTab === 'sim' ? 'waveCanvas' : 'theoryNumerovCanvas', shape: 'spotlight', label: '这就是当前页面的波函数图', duration: 12000 } });
+            } else {
+                inferred.push({ type: 'annotate', payload: { target: 'theoryNumerovCanvas', shape: 'spotlight', label: '先看这里的波函数曲线', duration: 12000 } });
+            }
+            return inferred.slice(0, 7);
+        }
+
+        if (actions.some(action => ['annotate', 'scrollToTarget', 'runTheoryScene', 'setTheoryFocus', 'playSimulation'].includes(action.type))) return actions;
+
+        if (/宽度|d\b|指数/.test(text)) {
+            inferred.push({ type: 'jumpTab', payload: { tab: 'data', chartVar: 'd' } });
+            inferred.push({ type: 'annotate', payload: { target: 'chartCanvas', shape: 'ring', label: '这里看 T 随宽度 d 的指数下降', duration: 10000 } });
+        } else if (/能量|e\b|高度|v0|势垒/.test(text)) {
+            inferred.push({ type: 'annotate', payload: { target: /高度|v0|势垒/.test(text) ? 'v0Slider' : 'eSlider', shape: 'arrow', label: '这里可以直接改变当前参数', duration: 10000 } });
+        } else if (/反射|越垒|超过|高于/.test(text)) {
+            inferred.push({ type: 'jumpTab', payload: { tab: 'theory' } });
+            inferred.push({ type: 'setTheoryFocus', payload: { focus: 'left' } });
+            inferred.push({ type: 'annotate', payload: { target: 'regionCardLeft', shape: 'spotlight', label: '左侧干涉对应反射项', duration: 10000 } });
+        } else {
+            inferred.push({ type: 'jumpTab', payload: { tab: 'theory' } });
+            inferred.push({ type: 'annotate', payload: { target: 'theoryNumerovCanvas', shape: 'ring', label: '先对照这张图理解波函数在势垒中的变化', duration: 10000 } });
+        }
+        return inferred.slice(0, 7);
     }
 
     async function handleAssistantPrompt(promptText) {
@@ -606,15 +752,48 @@
             removeAssistantThinking();
             appendAssistantMessage('assistant', response.reply);
             renderAssistantSuggestions(response.suggestions);
-            executeAssistantActions(response.actions);
+            executeAssistantActions(inferAssistantInteractionActions(message, response));
         } catch (error) {
             removeAssistantThinking();
             const fallback = getLocalAssistantResponse(message);
             appendAssistantMessage('assistant', `远程模型当前未返回可用讲解，我先用内置教学脚本带你看。\n\n${fallback.reply}`);
             renderAssistantSuggestions(fallback.suggestions);
-            executeAssistantActions(fallback.actions);
+            executeAssistantActions(inferAssistantInteractionActions(message, fallback));
         } finally {
             setAssistantLoading(false);
+        }
+    }
+
+    async function handleWhiteboardFollowup(promptText) {
+        const message = String(promptText || '').trim();
+        if (!message || assistantState.isLoading) return;
+        assistantState.messages.push({ role: 'user', content: message });
+        setAssistantLoading(true);
+        const bodyEl = document.getElementById('aiWhiteboardBody');
+        if (bodyEl) {
+            bodyEl.insertAdjacentHTML('afterbegin', '<div class="ai-whiteboard-summary"><div class="ai-whiteboard-summary-label">追问更新</div><p>正在根据你的追问更新讲解卡…</p><span class="ai-thinking-dots"><span></span><span></span><span></span></span></div>');
+        }
+        assistantState.currentActionRunId++;
+        try {
+            const response = await callRemoteAssistant(message);
+            assistantState.messages.push({ role: 'assistant', content: response.reply });
+            const whiteboardAction = inferAssistantInteractionActions(message, response).find(action => action.type === 'showWhiteboard');
+            if (whiteboardAction) {
+                showAssistantWhiteboard(whiteboardAction.payload);
+            } else {
+                showAssistantWhiteboard(createWhiteboardFromReply('追问展开', response.reply));
+            }
+            renderAssistantSuggestions(response.suggestions);
+            executeAssistantActions(inferAssistantInteractionActions(message, response).filter(action => action.type !== 'showWhiteboard'));
+        } catch (error) {
+            const fallback = getLocalAssistantResponse(message);
+            assistantState.messages.push({ role: 'assistant', content: fallback.reply });
+            const whiteboardAction = inferAssistantInteractionActions(message, fallback).find(action => action.type === 'showWhiteboard');
+            showAssistantWhiteboard(whiteboardAction ? whiteboardAction.payload : createWhiteboardFromReply('追问展开', fallback.reply));
+            renderAssistantSuggestions(fallback.suggestions);
+        } finally {
+            setAssistantLoading(false);
+            document.getElementById('aiWhiteboardFollowupInput')?.focus();
         }
     }
 
@@ -631,6 +810,7 @@
         if (payload && typeof payload.title === 'string' && Array.isArray(payload.steps) && payload.steps.length > 0) {
             return {
                 title: payload.title.slice(0, 80),
+                replySummary: typeof payload.replySummary === 'string' ? payload.replySummary : '',
                 steps: payload.steps.slice(0, 6).map(sanitizeWhiteboardStep),
                 followups: Array.isArray(payload.followups) ? payload.followups.filter(item => typeof item === 'string').slice(0, 4) : []
             };
@@ -639,6 +819,7 @@
         const lesson = assistantLessons[lessonId] || assistantLessons.tunnelDecay;
         return {
             title: lesson.title,
+            replySummary: typeof payload?.replySummary === 'string' ? payload.replySummary : '',
             steps: lesson.steps,
             followups: []
         };
@@ -649,10 +830,12 @@
         assistantState.activeLessonId = typeof payload === 'string' ? payload : payload?.lessonId || null;
         assistantState.activeLessonStep = 0;
         renderAssistantWhiteboard();
+        toggleAssistant(false);
         const backdrop = document.getElementById('aiWhiteboardBackdrop');
         if (backdrop) {
             backdrop.classList.add('active');
             backdrop.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('ai-whiteboard-open');
         }
         setTimeout(() => document.getElementById('aiWhiteboardClose')?.focus(), 80);
     }
@@ -662,7 +845,8 @@
         if (!backdrop || !backdrop.classList.contains('active')) return;
         backdrop.classList.remove('active');
         backdrop.setAttribute('aria-hidden', 'true');
-        document.getElementById('aiTutorInput')?.focus();
+        document.body.classList.remove('ai-whiteboard-open');
+        document.getElementById('aiTutorLauncher')?.focus();
     }
 
     function renderAssistantWhiteboard() {
@@ -678,6 +862,7 @@
         if (bodyEl) {
             const tr = calculateTR(E, V0, d);
             bodyEl.innerHTML = `
+                ${whiteboard.replySummary ? `<div class="ai-whiteboard-summary"><div class="ai-whiteboard-summary-label">本轮讲解</div>${formatAssistantText(whiteboard.replySummary)}</div>` : ''}
                 <div class="ai-whiteboard-step">第 ${step + 1} / ${whiteboard.steps.length} 步</div>
                 ${whiteboard.steps[step]}
                 <div class="ai-whiteboard-current">
@@ -688,22 +873,26 @@
         }
         if (prevBtn) prevBtn.disabled = step === 0;
         if (nextBtn) {
-            nextBtn.textContent = step === whiteboard.steps.length - 1 ? '回到聊天继续问' : '下一步';
-            nextBtn.dataset.finalStep = step === whiteboard.steps.length - 1 ? 'true' : 'false';
+            const isLastStep = step === whiteboard.steps.length - 1;
+            nextBtn.textContent = '下一步';
+            nextBtn.disabled = isLastStep;
+            nextBtn.dataset.finalStep = isLastStep ? 'true' : 'false';
         }
         if (whiteboard.followups?.length) renderAssistantSuggestions(whiteboard.followups);
     }
 
-    function showAssistantAnnotation(payload) {
-        const element = getAssistantTargetElement(payload.target);
+    async function showAssistantAnnotation(payload) {
+        const { element, rect } = await waitForAssistantTargetRect(payload.target);
         const layer = document.getElementById('aiAnnotationLayer');
         const svg = document.getElementById('aiAnnotationSvg');
         const label = document.getElementById('aiAnnotationLabel');
         const spotlight = document.getElementById('aiSpotlight');
-        if (!element || !layer || !svg || !label || !spotlight) return;
+        if (!element || !rect || !layer || !svg || !label || !spotlight) {
+            clearAssistantAnnotation();
+            return;
+        }
         assistantState.activeAnnotation = payload;
         if (assistantState.activeAnnotationTimer) clearTimeout(assistantState.activeAnnotationTimer);
-        const rect = element.getBoundingClientRect();
         const vw = window.innerWidth;
         const vh = window.innerHeight;
         svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -768,7 +957,15 @@
         const wbNext = document.getElementById('aiWhiteboardNext');
         const wbFollowupForm = document.getElementById('aiWhiteboardFollowupForm');
         const wbFollowupInput = document.getElementById('aiWhiteboardFollowupInput');
-        launcher?.addEventListener('click', () => toggleAssistant(!assistantState.isOpen));
+        const wbNewTopic = document.getElementById('aiWhiteboardNewTopic');
+        launcher?.addEventListener('click', () => {
+            if (document.body.classList.contains('ai-whiteboard-open')) {
+                closeAssistantWhiteboard();
+                toggleAssistant(true);
+                return;
+            }
+            toggleAssistant(!assistantState.isOpen);
+        });
         close?.addEventListener('click', () => toggleAssistant(false));
         form?.addEventListener('submit', event => {
             event.preventDefault();
@@ -789,11 +986,7 @@
         });
         wbNext?.addEventListener('click', () => {
             const whiteboard = assistantState.activeWhiteboard;
-            if (!whiteboard || assistantState.activeLessonStep >= whiteboard.steps.length - 1) {
-                toggleAssistant(true);
-                document.getElementById('aiTutorInput')?.focus();
-                return;
-            }
+            if (!whiteboard || assistantState.activeLessonStep >= whiteboard.steps.length - 1) return;
             assistantState.activeLessonStep += 1;
             renderAssistantWhiteboard();
         });
@@ -801,8 +994,12 @@
             event.preventDefault();
             const value = wbFollowupInput?.value || '';
             if (wbFollowupInput) wbFollowupInput.value = '';
+            handleWhiteboardFollowup(value);
+        });
+        wbNewTopic?.addEventListener('click', () => {
             closeAssistantWhiteboard();
-            handleAssistantPrompt(value);
+            toggleAssistant(true);
+            document.getElementById('aiTutorInput')?.focus();
         });
         window.addEventListener('resize', redrawAssistantAnnotation, { passive: true });
         window.addEventListener('scroll', redrawAssistantAnnotation, { passive: true });
