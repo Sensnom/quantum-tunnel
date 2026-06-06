@@ -157,7 +157,8 @@
         apiKey: 'sk-5c8347fc7a8e4b4ca7d74f6c71a4122e', // 远程模型 API Key
         model: `${'deep' + 'seek'}-v4-pro`,
         timeoutMs: 30000,
-        temperature: 0.35
+        temperature: 0.35,
+        maxTokens: 900
     };
 
     const assistantState = {
@@ -168,6 +169,7 @@
         currentActionRunId: 0,
         activeAnnotation: null,
         activeAnnotationTimer: null,
+        avoidRightPanelTimer: null,
         activeLessonId: null,
         activeLessonStep: 0,
         activeWhiteboard: null
@@ -192,6 +194,15 @@
         actualTValue: { selector: '#actualTValue', label: '波包实际透射' },
         tValue: { selector: '#tValue', label: '理论透射系数' }
     };
+
+    const assistantRightPanelTargets = new Set([
+        'v0Slider',
+        'dSlider',
+        'eSlider',
+        'sigmaSlider',
+        'actualTValue',
+        'tValue'
+    ]);
 
     const assistantTargetTabs = {
         waveCanvas: 'sim',
@@ -276,9 +287,33 @@
         return String(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
+    function formatAssistantPlainMarkdown(text) {
+        return escapeAssistantText(text)
+            .replace(/\*\*([^\n*]+)\*\*/g, '<strong>$1</strong>');
+    }
+
+    function formatAssistantInlineMarkdown(text) {
+        const source = String(text ?? '');
+        const tokenPattern = /(`[^`\n]+`|\$\$[\s\S]+?\$\$|\$[^$\n]+\$)/g;
+        let html = '';
+        let lastIndex = 0;
+        source.replace(tokenPattern, (match, _token, offset) => {
+            html += formatAssistantPlainMarkdown(source.slice(lastIndex, offset));
+            if (match.startsWith('`')) {
+                html += `<code>${escapeAssistantText(match.slice(1, -1))}</code>`;
+            } else {
+                html += escapeAssistantText(match);
+            }
+            lastIndex = offset + match.length;
+            return match;
+        });
+        html += formatAssistantPlainMarkdown(source.slice(lastIndex));
+        return html;
+    }
+
     function formatAssistantText(text) {
-        const safe = escapeAssistantText(text);
-        return safe.split(/\n{2,}/).map(part => `<p>${part.replace(/\n/g, '<br>')}</p>`).join('');
+        const blocks = String(text ?? '').split(/\n{2,}/).filter(part => part.trim());
+        return blocks.map(part => `<p>${formatAssistantInlineMarkdown(part).replace(/\n/g, '<br>')}</p>`).join('');
     }
 
     function getAssistantContext() {
@@ -308,7 +343,7 @@
     function buildAssistantMessages(userMessage) {
         const recentMessages = assistantState.messages
             .filter(message => message.role === 'user' || message.role === 'assistant')
-            .slice(-6)
+            .slice(-4)
             .map(message => ({ role: message.role, content: message.content }));
         const lastMessage = recentMessages[recentMessages.length - 1];
         const messages = [
@@ -364,6 +399,15 @@
         };
     }
 
+    function getAssistantRequestOptions(userMessage) {
+        const needsReasoning = /wkb|推导|证明|公式.*来|近似条件|严格|详细.*推|怎么算/.test(String(userMessage || '').toLowerCase());
+        return {
+            thinking: { type: needsReasoning ? 'enabled' : 'disabled' },
+            reasoning_effort: needsReasoning ? 'high' : undefined,
+            max_tokens: needsReasoning ? assistantApiConfig.maxTokens + 500 : assistantApiConfig.maxTokens
+        };
+    }
+
     async function callRemoteAssistant(userMessage) {
         if (!assistantApiConfig.enabled || !assistantApiConfig.apiKey) {
             throw new Error('远程模型 API Key 未配置');
@@ -371,6 +415,7 @@
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), assistantApiConfig.timeoutMs);
+        const requestOptions = getAssistantRequestOptions(userMessage);
         try {
             const response = await fetch(assistantApiConfig.endpoint, {
                 method: 'POST',
@@ -383,8 +428,9 @@
                     messages: buildAssistantMessages(userMessage),
                     temperature: assistantApiConfig.temperature,
                     stream: false,
-                    thinking: { type: 'enabled' },
-                    reasoning_effort: 'high'
+                    max_tokens: requestOptions.max_tokens,
+                    thinking: requestOptions.thinking,
+                    ...(requestOptions.reasoning_effort ? { reasoning_effort: requestOptions.reasoning_effort } : {})
                 }),
                 signal: controller.signal
             });
@@ -556,8 +602,10 @@
                 else control.setAttribute('tabindex', '-1');
             });
         }
-        if (open) setTimeout(() => document.getElementById('aiTutorInput')?.focus(), 120);
-        else launcher?.focus();
+        if (open) {
+            setAssistantAvoidRightPanel(false);
+            setTimeout(() => document.getElementById('aiTutorInput')?.focus(), 120);
+        } else launcher?.focus();
     }
 
     function isValidAssistantAction(action) {
@@ -574,6 +622,30 @@
         if (action.type === 'showWhiteboard') return Boolean(assistantLessons[payload.lessonId]) || (typeof payload.title === 'string' && Array.isArray(payload.steps) && payload.steps.length > 0);
         if (action.type === 'clearAnnotations') return true;
         return false;
+    }
+
+    function isAssistantRightPanelTarget(targetKey) {
+        return assistantRightPanelTargets.has(targetKey);
+    }
+
+    function setAssistantAvoidRightPanel(active, duration = 12000) {
+        document.body.classList.toggle('ai-tutor-avoid-right-panel', active);
+        if (assistantState.avoidRightPanelTimer) {
+            clearTimeout(assistantState.avoidRightPanelTimer);
+            assistantState.avoidRightPanelTimer = null;
+        }
+        if (active) {
+            assistantState.avoidRightPanelTimer = setTimeout(() => {
+                document.body.classList.remove('ai-tutor-avoid-right-panel');
+                assistantState.avoidRightPanelTimer = null;
+            }, duration);
+        }
+    }
+
+    function prepareAssistantTargetVisibility(targetKey, duration) {
+        if (!isAssistantRightPanelTarget(targetKey)) return;
+        toggleAssistant(false);
+        setAssistantAvoidRightPanel(true, Math.max(Number(duration) || 0, 12000));
     }
 
     function waitAssistant(ms) {
@@ -643,9 +715,11 @@
                 updatePlayPauseUI();
                 await waitAssistant(450);
             } else if (action.type === 'scrollToTarget') {
+                prepareAssistantTargetVisibility(payload.target, payload.duration);
                 await scrollAssistantTargetIntoView(payload.target);
                 await waitAssistant(200);
             } else if (action.type === 'annotate') {
+                prepareAssistantTargetVisibility(payload.target, payload.duration);
                 await scrollAssistantTargetIntoView(payload.target);
                 await showAssistantAnnotation(payload);
                 await waitAssistant(Math.min(Number(payload.duration) || 1200, 1600));
@@ -940,6 +1014,11 @@
             clearTimeout(assistantState.activeAnnotationTimer);
             assistantState.activeAnnotationTimer = null;
         }
+        if (assistantState.avoidRightPanelTimer) {
+            clearTimeout(assistantState.avoidRightPanelTimer);
+            assistantState.avoidRightPanelTimer = null;
+        }
+        document.body.classList.remove('ai-tutor-avoid-right-panel');
         assistantState.activeAnnotation = null;
     }
 
