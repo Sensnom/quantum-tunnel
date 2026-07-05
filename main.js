@@ -94,7 +94,7 @@
         },
         barrier: {
             label: '势垒内部',
-            explain: '区域 II：$Ce^{-\\kappa x} + De^{\\kappa x}$。能量低于势垒时，波数 $k$ 变成纯虚数 $i\\kappa$，振荡解 $e^{ikx}$ 退化成指数衰减。包络 $|\\psi|$ 从墙左侧到右侧持续下降。'
+            explain: '区域 II：$Ce^{-\\kappa x} + De^{\\kappa x}$。能量低于势垒时，波数 $k$ 变成纯虚数 $i\\kappa$，振荡解 $e^{ikx}$ 退化成指数衰减。包络 $\\lvert\\psi\\rvert$ 从墙左侧到右侧持续下降。'
         },
         right: {
             label: '右侧透射',
@@ -104,7 +104,7 @@
 
     const theoryComponentMeta = {
         all: {
-            explain: '蓝线是实部，红线是虚部，灰色虚线是包络 $|\psi|$。点"只看包络"可以单独看指数衰减的轮廓，不会被实虚部的振荡干扰。'
+            explain: '蓝线是实部，红线是虚部，灰色虚线是包络 $|\\psi|$。点"只看包络"可以单独看指数衰减的轮廓，不会被实虚部的振荡干扰。'
         },
         real: {
             explain: '实部只是 $\\psi$ 在实轴上的投影，不是概率。它会振荡、会穿过零轴，单独看它就是一条来回摆动的线，不是光滑的衰减轮廓。'
@@ -113,22 +113,22 @@
             explain: '虚部和实部地位对等，只是相位差了 90°。单独看它也是来回振荡的线，峰谷位置和实部错开，但幅度变化规律相同。'
         },
         env: {
-            explain: '包络 $|\\psi| = \\sqrt{(\\Re\\psi)^2 + (\\Im\\psi)^2}$ 是实部和虚部合起来的总幅度。墙内说的”指数衰减”，指的就是这条灰色虚线：它不振荡，只单调下降。'
+            explain: '包络 $|\\psi| = \\sqrt{(\\Re\\psi)^2 + (\\Im\\psi)^2}$ 是实部和虚部合起来的总幅度。进入势垒后，总振幅不再振荡，而是单调下降。'
         }
     };
 
     const theoryScenes = {
         tunnel: {
-            title: '场景 1：墙里为什么还有波？',
-            subtitle: '蓝实部，红虚部，灰虚线是包络 $|\\psi|$。墙内包络指数衰减。',
+            title: '场景 1：势垒内部的非零振幅',
+            subtitle: '蓝实部，红虚部，灰虚线是包络 $\\lvert\\psi\\rvert$。墙内包络指数衰减。',
             focus: 'barrier',
-            calcLead: '先看墙内振幅，再看理论透射率。',
+            calcLead: '墙内衰减越快，右侧透射波越弱。',
             run() {
                 animateParamsTo(1.5, 3.0, 0.5);
             }
         },
         width: {
-            title: '场景 2：为什么只加一点宽度，结果差很多？',
+            title: '场景 2：势垒宽度的指数影响',
             subtitle: '看灰色虚线（包络）和右侧透射波幅度。宽度每加一点，透射就跌一截。',
             focus: 'right',
             calcLead: '宽度 d 控制指数衰减的累计距离。d 翻倍，T 跌好几个数量级。',
@@ -137,7 +137,7 @@
             }
         },
         overBarrier: {
-            title: '场景 3：能量够了，为什么还有反射？',
+            title: '场景 3：越垒情形中的边界反射',
             subtitle: '把 E 调到 V₀ 以上，看左边干涉纹变稀疏，但反射波还在。',
             focus: 'left',
             calcLead: 'E > V₀ 时透射明显变大，但反射不会消失。边界条件要匹配，入射波就得有一部分被反射。',
@@ -245,7 +245,7 @@
             title: '墙里为什么还有波？',
             steps: [
                 '<p>先看势垒内部。经典图像会说：$E < V_0$，粒子进不了墙。但量子里我们看的不是一颗小球，而是波函数 $\\psi(x)$。</p><p>边界条件要求波函数和导数连续，所以它不能在墙边突然变成 0。</p>',
-                '<p>在势垒内部，薛定谔方程的振荡解会变成指数解：</p><div class="math-block">$$\\psi_{II}(x)=Ce^{-\\kappa x}+De^{\\kappa x}$$</div><p>真正决定“穿过去还剩多少”的，是包络 $|\\psi|$ 的指数衰减。</p>',
+                '<p>在势垒内部，薛定谔方程的振荡解会变成指数解：</p><div class="math-block">$$\\psi_{II}(x)=Ce^{-\\kappa x}+De^{\\kappa x}$$</div><p>真正决定“穿过去还剩多少”的，是包络 $\\lvert\\psi\\rvert$ 的指数衰减。</p>',
                 '<p>衰减常数是：</p><div class="math-block">$$\\kappa=\\frac{\\sqrt{2m(V_0-E)}}{\\hbar}$$</div><p>$V_0-E$ 越大，或势垒越宽，波函数衰减越强，透射率就越小。</p>'
             ]
         },
@@ -438,7 +438,7 @@
     }
 
     function buildAssistantSystemPrompt() {
-        return `你是一个量子隧穿仿真网页的中文 AI 助教，像老师一样带学生看图、看参数、看公式。你必须只返回 JSON，不要返回 Markdown 代码块。JSON 格式为：{"reply":"中文讲解","suggestions":["后续问题"],"whiteboard":{"title":"可选板书标题","steps":["可选步骤HTML"]},"actions":[{"type":"动作名","payload":{}}]}。可用动作：jumpTab(tab=sim|data|history|theory), runTheoryScene(scene=tunnel|width|overBarrier), setTheoryFocus(focus=left|barrier|right), setTheoryComponent(component=all|real|imag|env), animateParams(E,V0,d,duration), animateWidthSweep, playSimulation, pauseSimulation, resetSimulation, scrollToTarget(target), annotate(target,shape=ring|arrow|spotlight,label), showWhiteboard, clearAnnotations。每次回答都尽量给 1-3 个页面互动动作：概念解释优先跳到/标注 theoryNumerovCanvas、regionCardBarrier、regionCardLeft、regionCardRight；参数问题优先标注 v0Slider、dSlider、eSlider、chartCanvas、theoryCalcResult；实时波函数/播放动画/波包运动问题必须 jumpTab(sim) 并 playSimulation，再 annotate(waveCanvas 或 densityCanvas)。不要只给文字。重要：普通问题优先在聊天中回答并配合 annotate/scrollToTarget，不要频繁打开白板；只有学生明确要求推导、公式、WKB、分步骤解释，或问题确实需要板书时，才生成与问题直接相关的 whiteboard 或 showWhiteboard payload：{"title":"板书标题","steps":["第1步 HTML/公式","第2步 HTML/公式"],"followups":["可追问问题"]}。不要使用 lessonId；lessonId 只供本地兜底，不是远程回答格式。不要套用不相关预置板书。steps 可以包含 <p>、<div class=\"math-block\">$$...$$</div> 和行内 $...$，但不要包含 script、style 或事件属性。不要编造不存在的页面元素。回答要简洁、教学感强。`;
+        return `你是一个量子隧穿仿真网页的中文 AI 助教。用中文回复，直接描述学生看到的物理图像和参数关系；少用教学流程词（这里要注意、接下来、先看/再看、场景、模块），除非学生主动要求白板推导。你必须只返回 JSON，不要返回 Markdown 代码块。JSON 格式为：{"reply":"中文讲解","suggestions":["后续问题"],"whiteboard":{"title":"可选板书标题","steps":["可选步骤HTML"]},"actions":[{"type":"动作名","payload":{}}]}。可用动作：jumpTab(tab=sim|data|history|theory), runTheoryScene(scene=tunnel|width|overBarrier), setTheoryFocus(focus=left|barrier|right), setTheoryComponent(component=all|real|imag|env), animateParams(E,V0,d,duration), animateWidthSweep, playSimulation, pauseSimulation, resetSimulation, scrollToTarget(target), annotate(target,shape=ring|arrow|spotlight,label), showWhiteboard, clearAnnotations。每次回答都尽量给 1-3 个页面互动动作：概念解释优先跳到/标注 theoryNumerovCanvas、regionCardBarrier、regionCardLeft、regionCardRight；参数问题优先标注 v0Slider、dSlider、eSlider、chartCanvas、theoryCalcResult；实时波函数/播放动画/波包运动问题必须 jumpTab(sim) 并 playSimulation，再 annotate(waveCanvas 或 densityCanvas)。不要只给文字。重要：普通问题优先在聊天中回答并配合 annotate/scrollToTarget，不要频繁打开白板；只有学生明确要求推导、公式、WKB、分步骤解释，或问题确实需要板书时，才生成与问题直接相关的 whiteboard 或 showWhiteboard payload：{"title":"板书标题","steps":["第1步 HTML/公式","第2步 HTML/公式"],"followups":["可追问问题"]}。不要使用 lessonId；lessonId 只供本地兜底，不是远程回答格式。不要套用不相关预置板书。steps 可以包含 <p>、<div class=\"math-block\">$$...$$</div> 和行内 $...$，但不要包含 script、style 或事件属性。不要编造不存在的页面元素。回答要简洁、专业，像物理讨论。少用问句做标题/开头，不用"向左跑/向右跑/碰墙/跌得越狠/切到"等口语动词，不用"这里要注意/接下来/先看/关键点是"等课堂指示词。`;
     }
 
     function buildAssistantMessages(userMessage) {
@@ -473,7 +473,7 @@
 
     function normalizeAssistantResponse(value) {
         const response = value && typeof value === 'object' ? value : {};
-        const reply = typeof response.reply === 'string' ? response.reply : '我先带你看一个最关键的图像：墙内的波函数不是突然归零，而是指数衰减。';
+        const reply = typeof response.reply === 'string' ? response.reply : '墙内的波函数不会突然归零，而是沿势垒向右指数衰减。';
         const rawActions = Array.isArray(response.actions) ? response.actions.slice(0, 6) : [];
         const actions = [];
         let keptWhiteboard = false;
@@ -594,18 +594,18 @@
         }
         if (/白板|公式|推导|讲一下/.test(text)) {
             return normalizeAssistantResponse({
-                reply: '我用白板把当前最核心的公式拆开讲：重点是墙内指数衰减，以及它如何决定透射率。',
+                reply: '墙内指数衰减决定了透射率的数量级。公式里先由 $\\kappa$ 描述衰减快慢，再由势垒宽度 $d$ 累积这段衰减，最后得到近似的透射率。',
                 suggestions: ['演示墙内衰减', '讲参数影响', '去原理解析'],
                 actions: [
                     { type: 'jumpTab', payload: { tab: 'theory' } },
                     { type: 'showWhiteboard', payload: { lessonId: 'tunnelDecay' } },
-                    { type: 'annotate', payload: { target: 'theoryCalcResult', shape: 'ring', label: '这里把当前参数换算成理论透射率' } }
+                    { type: 'annotate', payload: { target: 'theoryCalcResult', shape: 'ring', label: '当前参数对应的理论透射率' } }
                 ]
             });
         }
         if (/页面|哪里|怎么看|怎么用|标签/.test(text)) {
             return normalizeAssistantResponse({
-                reply: '建议按“现象 → 规律 → 原理”的顺序看：先实时演化看波包分裂，再到参数关系看透射率曲线，最后到原理解析理解三段解。',
+                reply: '实时演化显示波包怎样分成反射和透射，参数关系给出透射率随 $E$、$V_0$、$d$ 的变化，原理解析把这些现象对应到三段波函数解。',
                 suggestions: ['带我看原理解析', '去参数关系', '打开白板'],
                 actions: [
                     { type: 'showWhiteboard', payload: { lessonId: 'howToReadPage' } },
@@ -614,8 +614,8 @@
             });
         }
         return normalizeAssistantResponse({
-            reply: '关键点是：量子隧穿不是“小球硬穿墙”，而是波函数在势垒内指数衰减，并在另一侧留下非零振幅。我先带你看原理解析里的墙内衰减。',
-            suggestions: ['为什么墙里还有波？', '为什么宽度影响很大？', '用白板讲公式'],
+            reply: '量子隧穿不是小球硬穿墙。波函数进入势垒后会指数衰减；只要衰减后还剩下振幅，右侧就会出现透射波。',
+            suggestions: ['势垒内为什么仍有振幅？', '宽度怎样影响透射率？', '用白板讲公式'],
             actions: [
                 { type: 'jumpTab', payload: { tab: 'theory' } },
                 { type: 'runTheoryScene', payload: { scene: 'tunnel' } },
@@ -641,7 +641,7 @@
     function renderAssistantSuggestions(suggestions) {
         const container = document.getElementById('aiTutorSuggestions');
         if (!container) return;
-        const nextSuggestions = suggestions && suggestions.length ? suggestions : ['为什么墙里还有波？', '为什么宽度影响这么大？', '用白板讲公式'];
+        const nextSuggestions = suggestions && suggestions.length ? suggestions : ['势垒内为什么仍有振幅？', '宽度怎样影响透射率？', '用白板讲公式'];
         container.innerHTML = nextSuggestions.map(text => `<button type="button" class="ai-suggestion-chip">${escapeAssistantText(text)}</button>`).join('');
         container.querySelectorAll('button').forEach(button => {
             button.addEventListener('click', () => handleAssistantPrompt(button.textContent));
@@ -924,7 +924,7 @@
                 inferred.push({ type: 'jumpTab', payload: { tab: currentTab === 'sim' ? 'sim' : 'theory' } });
                 inferred.push({ type: 'annotate', payload: { target: currentTab === 'sim' ? 'waveCanvas' : 'theoryNumerovCanvas', shape: 'spotlight', label: '这就是当前页面的波函数图', duration: 12000 } });
             } else {
-                inferred.push({ type: 'annotate', payload: { target: 'theoryNumerovCanvas', shape: 'spotlight', label: '先看这里的波函数曲线', duration: 12000 } });
+                inferred.push({ type: 'annotate', payload: { target: 'theoryNumerovCanvas', shape: 'spotlight', label: '势垒内的指数衰减曲线', duration: 12000 } });
             }
             return inferred.slice(0, 7);
         }
@@ -942,7 +942,7 @@
             inferred.push({ type: 'annotate', payload: { target: 'regionCardLeft', shape: 'spotlight', label: '左侧干涉对应反射项', duration: 10000 } });
         } else {
             inferred.push({ type: 'jumpTab', payload: { tab: 'theory' } });
-            inferred.push({ type: 'annotate', payload: { target: 'theoryNumerovCanvas', shape: 'ring', label: '先对照这张图理解波函数在势垒中的变化', duration: 10000 } });
+            inferred.push({ type: 'annotate', payload: { target: 'theoryNumerovCanvas', shape: 'ring', label: '波函数在势垒中的衰减和透射', duration: 10000 } });
         }
         return inferred.slice(0, 7);
     }
@@ -1249,7 +1249,7 @@
         });
         toggleAssistant(false);
         appendAssistantMessage('assistant', '你好，我是这个量子隧穿实验台的 AI 助教。你可以直接问我概念，也可以让我带你跳到对应页面、画圈标注重点，或打开白板讲公式。');
-        renderAssistantSuggestions(['为什么墙里还有波？', '为什么宽度影响这么大？', '能量超过势垒为什么还有反射？', '用白板讲公式']);
+        renderAssistantSuggestions(['势垒内为什么仍有振幅？', '宽度怎样影响透射率？', '越垒时反射从哪里来？', '用白板讲公式']);
     }
 
     // 交互状态
@@ -3462,7 +3462,8 @@
                 delimiters: [
                     {left: "$$", right: "$$", display: true},
                     {left: "$", right: "$", display: false}
-                ]
+                ],
+                ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code", "option"]
             });
         }
 
