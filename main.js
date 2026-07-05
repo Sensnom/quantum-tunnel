@@ -184,6 +184,8 @@
         activeAnnotation: null,
         activeAnnotationTimer: null,
         avoidRightPanelTimer: null,
+        annotationRedrawTimer: null,
+        isProgrammaticScroll: false,
         activeLessonId: null,
         activeLessonStep: 0,
         activeWhiteboard: null
@@ -198,6 +200,9 @@
         chartCanvas: { selector: '#chartCanvas', label: '理论透射率曲线' },
         theoryNumerovCanvas: { selector: '#theoryNumerovCanvas', label: '原理解析曲线' },
         theoryCalcResult: { selector: '#theoryCalcResult', label: '当前理论计算结果' },
+        timelineNodes: { selector: '#timelineNodes', label: '量子隧穿发展历史时间轴' },
+        historyDetailPanel: { selector: '#historyDetailPanel', label: '当前历史节点详情' },
+        historyParamTip: { selector: '#historyParamTip', label: '历史节点对应的仿真参数' },
         regionCardBarrier: { selector: '#regionCardBarrier', label: '势垒内部区域' },
         regionCardLeft: { selector: '#regionCardLeft', label: '入射与反射区域' },
         regionCardRight: { selector: '#regionCardRight', label: '透射区域' },
@@ -227,6 +232,9 @@
         chartCanvas: 'data',
         theoryNumerovCanvas: 'theory',
         theoryCalcResult: 'theory',
+        timelineNodes: 'history',
+        historyDetailPanel: 'history',
+        historyParamTip: 'history',
         regionCardBarrier: 'theory',
         regionCardLeft: 'theory',
         regionCardRight: 'theory'
@@ -303,7 +311,8 @@
 
     function formatAssistantPlainMarkdown(text) {
         return escapeAssistantText(text)
-            .replace(/\*\*([^\n*]+)\*\*/g, '<strong>$1</strong>');
+            .replace(/\*\*([^\n*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/__([^\n_]+)__/g, '<strong>$1</strong>');
     }
 
     function formatAssistantInlineMarkdown(text) {
@@ -325,9 +334,80 @@
         return html;
     }
 
+    function formatAssistantCodeBlock(text) {
+        return `<pre class="ai-tutor-code-block"><code>${escapeAssistantText(text).trim()}</code></pre>`;
+    }
+
+    function formatAssistantTextBlock(text) {
+        const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n');
+        const html = [];
+        let paragraph = [];
+        let listItems = [];
+        let listType = null;
+
+        const flushParagraph = () => {
+            if (!paragraph.length) return;
+            html.push(`<p>${formatAssistantInlineMarkdown(paragraph.join('\n')).replace(/\n/g, '<br>')}</p>`);
+            paragraph = [];
+        };
+        const flushList = () => {
+            if (!listItems.length) return;
+            const tag = listType === 'ol' ? 'ol' : 'ul';
+            const className = tag === 'ol' ? 'ai-tutor-list ai-tutor-list-ordered' : 'ai-tutor-list';
+            html.push(`<${tag} class="${className}">${listItems.map(item => `<li>${formatAssistantInlineMarkdown(item)}</li>`).join('')}</${tag}>`);
+            listItems = [];
+            listType = null;
+        };
+
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            if (!trimmed) {
+                flushParagraph();
+                flushList();
+                return;
+            }
+
+            const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+            if (heading) {
+                flushParagraph();
+                flushList();
+                const level = Math.min(3, heading[1].length + 2);
+                html.push(`<h${level} class="ai-tutor-heading">${formatAssistantInlineMarkdown(heading[2])}</h${level}>`);
+                return;
+            }
+
+            const bullet = trimmed.match(/^[-*+]\s+(.+)$/);
+            const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+            if (bullet || ordered) {
+                flushParagraph();
+                const nextType = ordered ? 'ol' : 'ul';
+                if (listType && listType !== nextType) flushList();
+                listType = nextType;
+                listItems.push((bullet || ordered)[1]);
+                return;
+            }
+
+            const quote = trimmed.match(/^>\s?(.+)$/);
+            if (quote) {
+                flushParagraph();
+                flushList();
+                html.push(`<blockquote class="ai-tutor-quote">${formatAssistantInlineMarkdown(quote[1])}</blockquote>`);
+                return;
+            }
+
+            flushList();
+            paragraph.push(trimmed);
+        });
+
+        flushParagraph();
+        flushList();
+        return html.join('');
+    }
+
     function formatAssistantText(text) {
-        const blocks = String(text ?? '').split(/\n{2,}/).filter(part => part.trim());
-        return blocks.map(part => `<p>${formatAssistantInlineMarkdown(part).replace(/\n/g, '<br>')}</p>`).join('');
+        const source = String(text ?? '').replace(/\r\n/g, '\n');
+        const parts = source.split(/```(?:[\w-]+)?\n?([\s\S]*?)```/g);
+        return parts.map((part, index) => index % 2 === 1 ? formatAssistantCodeBlock(part) : formatAssistantTextBlock(part)).join('');
     }
 
     function getAssistantContext() {
@@ -337,6 +417,13 @@
             parameters: { E: Number(E.toFixed(3)), V0: Number(V0.toFixed(3)), d: Number(d.toFixed(3)), sigma: Number(sigma.toFixed(3)) },
             theory: { scene: currentTheoryScene, focus: currentTheoryFocus, component: currentTheoryComponent },
             transmission: { T: Number(tr.T.toPrecision(6)), R: Number(tr.R.toPrecision(6)) },
+            developmentHistory: {
+                meaning: '量子隧穿发展历史时间轴，不是浏览记录、聊天记录或仿真结果记录',
+                current: historyData[selectedHistoryNode]
+                    ? { year: historyData[selectedHistoryNode].year, title: historyData[selectedHistoryNode].title }
+                    : null,
+                milestones: historyData.map(({ year, title }) => ({ year, title }))
+            },
             whiteboard: assistantState.activeWhiteboard ? {
                 title: assistantState.activeWhiteboard.title,
                 step: assistantState.activeLessonStep + 1,
@@ -689,9 +776,36 @@
         return { element: getAssistantTargetElement(targetKey), rect: null };
     }
 
+    function enrichAssistantScrollActions(actions) {
+        if (!Array.isArray(actions)) return [];
+        const enriched = [];
+        actions.forEach((action, index) => {
+            enriched.push(action);
+            if (action?.type !== 'scrollToTarget') return;
+            const target = action.payload?.target;
+            if (!assistantTargets[target]) return;
+            const nextAction = actions[index + 1];
+            const alreadyAnnotated = actions.some(candidate =>
+                candidate?.type === 'annotate' && candidate.payload?.target === target
+            );
+            if (alreadyAnnotated || nextAction?.type === 'annotate') return;
+            enriched.push({
+                type: 'annotate',
+                payload: {
+                    target,
+                    shape: 'spotlight',
+                    label: `已定位到：${assistantTargets[target].label}`,
+                    duration: 7000
+                }
+            });
+        });
+        return enriched;
+    }
+
     async function executeAssistantActions(actions) {
         const runId = ++assistantState.currentActionRunId;
-        for (const action of actions.filter(isValidAssistantAction)) {
+        const queuedActions = enrichAssistantScrollActions(actions).filter(isValidAssistantAction);
+        for (const action of queuedActions) {
             if (runId !== assistantState.currentActionRunId) return;
             const payload = action.payload || {};
             if (action.type === 'jumpTab') {
@@ -741,7 +855,7 @@
                 showAssistantWhiteboard(payload);
                 await waitAssistant(300);
             } else if (action.type === 'clearAnnotations') {
-                clearAssistantAnnotation();
+                clearAssistantAnnotation({ clearAvoidRightPanel: true });
             }
         }
     }
@@ -753,7 +867,14 @@
             await waitAssistant(180);
         }
         const element = getAssistantTargetElement(targetKey);
-        if (element) element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        if (element) {
+            assistantState.isProgrammaticScroll = true;
+            element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+            setTimeout(() => {
+                assistantState.isProgrammaticScroll = false;
+                scheduleAssistantAnnotationRedraw();
+            }, 520);
+        }
         await waitAssistant(350);
     }
 
@@ -969,7 +1090,8 @@
         if (whiteboard.followups?.length) renderAssistantSuggestions(whiteboard.followups);
     }
 
-    async function showAssistantAnnotation(payload) {
+    async function showAssistantAnnotation(payload, options = {}) {
+        const resetTimer = options.resetTimer !== false;
         const { element, rect } = await waitForAssistantTargetRect(payload.target);
         const layer = document.getElementById('aiAnnotationLayer');
         const svg = document.getElementById('aiAnnotationSvg');
@@ -980,7 +1102,7 @@
             return;
         }
         assistantState.activeAnnotation = payload;
-        if (assistantState.activeAnnotationTimer) clearTimeout(assistantState.activeAnnotationTimer);
+        if (resetTimer && assistantState.activeAnnotationTimer) clearTimeout(assistantState.activeAnnotationTimer);
         const vw = window.innerWidth;
         const vh = window.innerHeight;
         svg.setAttribute('viewBox', `0 0 ${vw} ${vh}`);
@@ -994,12 +1116,19 @@
         const cx = rect.left + rect.width / 2;
         const cy = rect.top + rect.height / 2;
         const shape = payload.shape || 'circle';
+        const labelWidth = 250;
+        const labelLeft = Math.min(vw - labelWidth - 18, Math.max(18, shape === 'arrow' ? cx - labelWidth - 72 : rect.left));
+        const labelTop = Math.min(vh - 72, Math.max(18, shape === 'arrow' ? cy - 92 : rect.top - 58));
         if (shape === 'arrow') {
-            const startX = Math.max(28, Math.min(vw - 28, cx - 170));
-            const startY = Math.max(28, Math.min(vh - 28, cy - 90));
-            svg.innerHTML += `<path class="ai-annotation-arrow" d="M ${startX} ${startY} C ${startX + 80} ${startY}, ${cx - 80} ${cy}, ${cx} ${cy}" marker-end="url(#aiArrowHead)"/>`;
+            const startX = labelLeft + labelWidth - 8;
+            const startY = labelTop + 24;
+            svg.innerHTML += `<path class="ai-annotation-connector" d="M ${labelLeft + 14} ${labelTop + 44} L ${labelLeft + 48} ${labelTop + 44}"/>`;
+            svg.innerHTML += `<circle class="ai-annotation-marker" cx="${labelLeft + 14}" cy="${labelTop + 44}" r="10"/>`;
+            svg.innerHTML += `<text class="ai-annotation-marker-text" x="${labelLeft + 14}" y="${labelTop + 48}" text-anchor="middle">1</text>`;
+            svg.innerHTML += `<path class="ai-annotation-arrow" d="M ${startX} ${startY} C ${startX + 72} ${startY - 18}, ${cx - 92} ${cy - 42}, ${cx} ${cy}" marker-end="url(#aiArrowHead)"/>`;
         } else {
-            svg.innerHTML += `<rect class="ai-annotation-ring" x="${Math.max(8, rect.left - 10)}" y="${Math.max(8, rect.top - 10)}" width="${rect.width + 20}" height="${rect.height + 20}" rx="18"/>`;
+            const pad = shape === 'spotlight' ? 14 : 10;
+            svg.innerHTML += `<rect class="ai-annotation-ring ${shape === 'spotlight' ? 'spotlight-ring' : ''}" x="${Math.max(8, rect.left - pad)}" y="${Math.max(8, rect.top - pad)}" width="${rect.width + pad * 2}" height="${rect.height + pad * 2}" rx="18"/>`;
         }
         if (shape === 'spotlight') {
             spotlight.style.left = `${Math.max(8, rect.left - 10)}px`;
@@ -1011,13 +1140,17 @@
             spotlight.classList.remove('active');
         }
         label.textContent = payload.label || assistantTargets[payload.target]?.label || '看这里';
-        label.style.left = `${Math.min(vw - 230, Math.max(18, rect.left))}px`;
-        label.style.top = `${Math.max(18, rect.top - 52)}px`;
+        label.className = `ai-annotation-label ${shape === 'arrow' ? 'arrow' : ''}`;
+        label.style.left = `${labelLeft}px`;
+        label.style.top = `${labelTop}px`;
         layer.classList.add('active');
-        assistantState.activeAnnotationTimer = setTimeout(clearAssistantAnnotation, Number(payload.duration) || 9000);
+        if (resetTimer) {
+            assistantState.activeAnnotationTimer = setTimeout(() => clearAssistantAnnotation({ clearAvoidRightPanel: true }), Number(payload.duration) || 9000);
+        }
     }
 
-    function clearAssistantAnnotation() {
+    function clearAssistantAnnotation(options = {}) {
+        const clearAvoidRightPanel = options.clearAvoidRightPanel === true;
         const layer = document.getElementById('aiAnnotationLayer');
         const svg = document.getElementById('aiAnnotationSvg');
         const spotlight = document.getElementById('aiSpotlight');
@@ -1028,16 +1161,28 @@
             clearTimeout(assistantState.activeAnnotationTimer);
             assistantState.activeAnnotationTimer = null;
         }
-        if (assistantState.avoidRightPanelTimer) {
+        if (clearAvoidRightPanel && assistantState.avoidRightPanelTimer) {
             clearTimeout(assistantState.avoidRightPanelTimer);
             assistantState.avoidRightPanelTimer = null;
         }
-        document.body.classList.remove('ai-tutor-avoid-right-panel');
+        if (clearAvoidRightPanel) {
+            document.body.classList.remove('ai-tutor-avoid-right-panel');
+        }
         assistantState.activeAnnotation = null;
     }
 
+    function scheduleAssistantAnnotationRedraw() {
+        if (assistantState.isProgrammaticScroll || assistantState.annotationRedrawTimer) return;
+        assistantState.annotationRedrawTimer = setTimeout(() => {
+            assistantState.annotationRedrawTimer = null;
+            redrawAssistantAnnotation();
+        }, 80);
+    }
+
     function redrawAssistantAnnotation() {
-        clearAssistantAnnotation();
+        const activeAnnotation = assistantState.activeAnnotation;
+        if (!activeAnnotation) return;
+        showAssistantAnnotation(activeAnnotation, { resetTimer: false });
     }
 
     function initAssistantTutor() {
@@ -1094,12 +1239,12 @@
             toggleAssistant(true);
             document.getElementById('aiTutorInput')?.focus();
         });
-        window.addEventListener('resize', redrawAssistantAnnotation, { passive: true });
-        window.addEventListener('scroll', redrawAssistantAnnotation, { passive: true });
+        window.addEventListener('resize', scheduleAssistantAnnotationRedraw, { passive: true });
+        window.addEventListener('scroll', scheduleAssistantAnnotationRedraw, { passive: true });
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') {
                 closeAssistantWhiteboard();
-                clearAssistantAnnotation();
+                clearAssistantAnnotation({ clearAvoidRightPanel: true });
             }
         });
         toggleAssistant(false);
