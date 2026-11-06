@@ -169,7 +169,7 @@
                 .map(part => part.value.split('').reverse().join(''))
                 .join('');
         })(), // 远程模型 API Key
-        model: `${'deep' + 'seek'}-v4-pro`,
+        model: `${'deep' + 'seek'}-flash`,
         timeoutMs: 30000,
         temperature: 0.35,
         maxTokens: 900
