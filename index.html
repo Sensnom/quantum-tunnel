@@ -12,7 +12,7 @@
     <meta name="screen-orientation" content="portrait">
     <meta name="full-screen" content="yes">
     <title>量子隧穿仿真</title>
-    <link rel="stylesheet" href="styles.css?v=20260423-pip-fix">
+    <link rel="stylesheet" href="styles.css?v=20261106-ai-ui">
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -358,7 +358,7 @@
                 </marker>
             </defs>
         </svg>
-        <div class="ai-annotation-label" id="aiAnnotationLabel"></div>
+        <section class="ai-annotation-label" id="aiAnnotationLabel" role="region" aria-label="AI 页面批注"></section>
     </div>
 
     <div class="ai-whiteboard-backdrop" id="aiWhiteboardBackdrop" aria-hidden="true">
@@ -393,7 +393,7 @@
                 <div>
                     <p class="ai-tutor-kicker">Quantum Tutor</p>
                     <h2>AI 助教</h2>
-                    <span id="aiTutorStatus" role="status" aria-live="polite" aria-atomic="true">内置讲解模式</span>
+                    <span id="aiTutorStatus" role="status" aria-live="polite" aria-atomic="true">DeepSeek</span>
                 </div>
                 <button type="button" class="ai-icon-button" id="aiTutorClose" aria-label="收起 AI 助教">×</button>
             </div>
@@ -407,6 +407,8 @@
     </aside>
 
     <script src="physics.js"></script>
+    <script src="annotations.js"></script>
+    <script src="tutor.js"></script>
     <script src="main.js"></script>
 </body>
 </html>
