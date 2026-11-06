@@ -131,6 +131,113 @@
         return result;
     }
 
+    const actionNames = new Set([
+        'jumpTab', 'runTheoryScene', 'setTheoryFocus', 'setTheoryComponent',
+        'animateParams', 'animateWidthSweep', 'playSimulation', 'pauseSimulation',
+        'resetSimulation', 'scrollToTarget', 'annotate', 'showWhiteboard', 'clearAnnotations'
+    ]);
+    const controlNames = ['action', 'actions', 'tool_call', 'tool_calls', 'function_call', 'function_calls', 'think', 'analysis', 'reasoning', 'reasoning_content'];
+    const actionTags = new Set(controlNames.slice(0, 6));
+
+    function controlTagAt(text, index) {
+        const tail = text.slice(index);
+        const full = tail.match(/^<\s*(\/?)\s*([a-z_]+)(?=[\s/>])[^>]*>/i);
+        if (full && controlNames.includes(full[2].toLowerCase())) {
+            return { name: full[2].toLowerCase(), closing: Boolean(full[1]), end: index + full[0].length };
+        }
+        const pending = tail.match(/^<\s*\/?\s*([a-z_]*)([^>]*)$/i);
+        if (pending) {
+            const name = pending[1].toLowerCase();
+            const unfinishedName = pending[2] === '' && controlNames.some(known => known.startsWith(name));
+            const unfinishedTag = controlNames.includes(name) && /^\s/.test(pending[2]);
+            if (unfinishedName || unfinishedTag) return { pending: true };
+        }
+        return null;
+    }
+
+    function controlClose(text, start, name) {
+        let depth = 1;
+        for (let i = start; i < text.length;) {
+            // A literal closing tag inside a JSON argument is data, not a delimiter.
+            if (text[i] === '"') {
+                const string = readString(text, i);
+                if (!string.complete) return null;
+                i = string.end;
+                continue;
+            }
+            const tag = text[i] === '<' ? controlTagAt(text, i) : null;
+            if (tag && !tag.pending) {
+                if (tag.name === name) depth += tag.closing ? -1 : 1;
+                if (!depth) return { start: i, end: tag.end };
+                i = tag.end;
+            } else i++;
+        }
+        return null;
+    }
+
+    function decodeControlActions(value, depth = 0) {
+        if (depth > 8) return [];
+        if (Array.isArray(value)) return value.slice(0, 7).flatMap(item => decodeControlActions(item, depth + 1)).slice(0, 7);
+        if (!value || typeof value !== 'object') return [];
+        if (Array.isArray(value.actions)) return decodeControlActions(value.actions, depth + 1);
+        if (Array.isArray(value.tool_calls)) return decodeControlActions(value.tool_calls, depth + 1);
+        const fn = value.function || value;
+        const type = actionNames.has(value.type) ? value.type : fn.name;
+        if (!actionNames.has(type)) return [];
+        let payload = actionNames.has(value.type) ? value.payload : fn.arguments;
+        if (typeof payload === 'string') {
+            try { payload = JSON.parse(payload); } catch { return []; }
+        }
+        if (payload == null) payload = {};
+        if (typeof payload !== 'object' || Array.isArray(payload)) return [];
+        return [{ type, payload }];
+    }
+
+    // Separate control records before any renderer can see them. Only outer, fully
+    // received controls may supply actions; decoded reply text is a display-only channel.
+    function splitControls(content, { protectJson = false, extractActions = false, depth = 0 } = {}) {
+        let text = '';
+        const actions = [];
+        for (let i = 0; i < content.length;) {
+            if (content[i] === '{' || content[i] === '[') {
+                const value = valueEnd(content, i);
+                if (value.complete) {
+                    let record;
+                    try { record = JSON.parse(content.slice(i, value.end)); } catch { /* ordinary text or LaTeX */ }
+                    const envelope = record && !Array.isArray(record) && ('reply' in record || 'thinking_summary' in record || 'whiteboard' in record);
+                    const supplied = envelope ? [] : decodeControlActions(record);
+                    if (supplied.length) {
+                        if (extractActions) actions.push(...supplied);
+                        text += '\n';
+                        i = value.end;
+                        continue;
+                    }
+                }
+                if (protectJson) {
+                    text += content.slice(i, value.end);
+                    i = value.end;
+                    continue;
+                }
+            }
+            const tag = content[i] === '<' ? controlTagAt(content, i) : null;
+            if (!tag) { text += content[i++]; continue; }
+            if (tag.pending) break;
+            if (tag.closing) { i = tag.end; continue; }
+            const close = controlClose(content, tag.end, tag.name);
+            if (!close) break; // Quarantine unfinished controls, even at the end of a response.
+            if (extractActions && actionTags.has(tag.name)) {
+                const body = content.slice(tag.end, close.start).trim();
+                try { actions.push(...decodeControlActions(JSON.parse(body))); }
+                catch {
+                    if (depth < 4) actions.push(...splitControls(body, { extractActions: true, protectJson: true, depth: depth + 1 }).actions);
+                }
+            }
+            text += '\n';
+            i = close.end;
+        }
+        return { text: text.replace(/```(?:json|xml|html)?\s*```/gi, '').trim(), actions: actions.slice(0, 7) };
+    }
+
     function envelopeStarts(text) {
         return Array.from(text.matchAll(/\{\s*"/g), match => match.index);
     }
@@ -139,7 +246,7 @@
         return text.replace(/(?:^|\n)```(?:j(?:s(?:o(?:n)?)?)?)?\s*$/i, '').trim();
     }
 
-    function publicSnapshot(content) {
+    function snapshotFields(content) {
         const starts = envelopeStarts(content);
         if (starts.length) {
             for (const start of [...starts].reverse()) {
@@ -161,7 +268,7 @@
         return { reply: plainPrefix(content), thinkingSummary: [] };
     }
 
-    function parseResponse(content) {
+    function parseEnvelope(content) {
         if (typeof content !== 'string' || !content.trim()) throw failure('empty_response', { reason: 'empty_content' });
         const text = content.trim();
         const starts = envelopeStarts(text);
@@ -181,6 +288,28 @@
             throw failure('invalid_response', { reason: starts.length ? 'incomplete_reply' : 'missing_reply' });
         }
         return { reply: text, suggestions: [], actions: [], thinkingSummary: [] };
+    }
+
+    function publicSnapshot(content) {
+        const outer = splitControls(content, { protectJson: true });
+        const snapshot = snapshotFields(outer.text);
+        return { reply: splitControls(snapshot.reply).text, thinkingSummary: snapshot.thinkingSummary };
+    }
+
+    function parseResponse(content) {
+        if (typeof content !== 'string') throw failure('empty_response');
+        const outer = splitControls(content, { protectJson: true, extractActions: true });
+        const parsed = parseEnvelope(outer.text);
+        const reply = splitControls(parsed.reply).text;
+        if (!reply) throw failure('empty_response', { reason: 'control_only_response' });
+        const seen = new Set();
+        const actions = [...(parsed.actions || []), ...outer.actions].filter(action => {
+            const key = JSON.stringify(action);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).slice(0, 6);
+        return { ...parsed, reply, actions };
     }
 
     function getErrorMessage(error) {

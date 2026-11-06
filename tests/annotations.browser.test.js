@@ -692,3 +692,44 @@ test('a model reply with prose before JSON displays once and still executes its 
     assert.doesNotMatch(content, /thinking_summary|"actions"|"reply"/);
     assert.equal(await page.evaluate(() => currentTab), 'sim');
 });
+
+test('streamed action tags stay invisible and supplied controls still run in order', async t => {
+    const page = await openPage(t, { width: 375, height: 667 });
+    const reply = '调整 σ 后，重新播放，等散射结束再比较。';
+    await page.evaluate(() => {
+        activateTab('history');
+        const original = window.fetch;
+        window.fetch = (url, options) => {
+            if (!String(url).endsWith('/chat/completions')) return original(url, options);
+            return Promise.resolve(new Response(new ReadableStream({ start(controller) {
+                window.controlStream = controller;
+                options.signal.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')));
+            } }), { headers: { 'content-type': 'text/event-stream' } }));
+        };
+        window.pushControlContent = content => controlStream.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`));
+        window.controlResponse = handleAssistantPrompt('我自己调小 σ 试试');
+    });
+    await page.waitForFunction(() => !!window.controlStream);
+    await page.evaluate(reply => pushControlContent(reply + '\n\n<ac'), reply);
+    await page.waitForFunction(reply => document.querySelector('.ai-tutor-message.loading .ai-tutor-message-content')?.textContent === reply, reply);
+    assert.doesNotMatch(await page.locator('#aiTutorMessages').textContent(), /<ac|payload|sigmaSlider/);
+    assert.equal(await page.evaluate(() => currentTab), 'history');
+    await page.evaluate(() => {
+        pushControlContent('tion>{"type":"jumpTab","payload":{"tab":"sim"}}</action>\n' +
+            '<action>{"type":"annotate","payload":{"target":"sigmaSlider","shape":"interact","direction":"decrease","label":"调小 σ"}}</action>\n' +
+            '<action>{"type":"annotate","payload":{"target":"tValue","shape":"ring","label":"比较理论 T"}}</action>');
+        controlStream.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n'));
+        controlStream.close();
+    });
+    await page.evaluate(() => window.controlResponse);
+    await page.waitForFunction(() => assistantState.activeAnnotation?.target === 'sigmaSlider');
+    const bubble = page.locator('.ai-tutor-message.assistant .ai-tutor-message-content').last();
+    assert.equal(await bubble.textContent(), reply);
+    assert.equal(await page.evaluate(() => currentTab), 'sim');
+    await page.locator('.ai-annotation-focus').click();
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForFunction(() => assistantState.activeAnnotation?.target === 'tValue');
+    await page.keyboard.press('Escape');
+    await page.locator('#aiTutorLauncher').click();
+    if (process.env.AI_SCREENSHOTS) await page.screenshot({ animations: 'disabled', path: path.join(process.env.AI_SCREENSHOTS, 'protocol-clean.png') });
+});
